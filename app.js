@@ -6,6 +6,14 @@ const path = require('path')
 require('lodash.product')
 const _ = require('lodash')
 const {StatusCodes} = require('http-status-codes')
+
+const Downloader = require('nodejs-file-downloader')
+const PdfImgConvert = require('pdf-img-convert')
+const express = require('express')
+const compression = require('compression')
+const serveIndex = require('serve-index')
+const VisionectApiClient = require('node-visionect')
+
 const db = require('./db.js')
 
 const log = console
@@ -90,7 +98,6 @@ const download = (newspaper, date) => {
 
   log.info(`Checking for ${name} ...`)
   const url = newspaper.url(dayjs(date))
-  const Downloader = require('nodejs-file-downloader')
 
   return new Downloader({url, directory, fileName})
     .download()
@@ -105,7 +112,7 @@ const download = (newspaper, date) => {
 
 const pdfToImage = (pdf, png) => {
   log.info(`Converting ${pdf} to ${png} ...`)
-  return require('pdf-img-convert')
+  return PdfImgConvert
     .convert(pdf, config.display.pdf2ImgOpts)
     .then(images => fs.writeFile(png, images[0], () => log.info(`Wrote ${png}`)))
     .catch(error => fs.rm(pdf, () => log.error(`Could not convert ${pdf} to png`, error))) // Corrupted pdf? Delete it
@@ -161,15 +168,14 @@ const updateVss = (vss) => {
 
 
 /** Setup the express server */
-const express = require('express')
 const app = express()
   // Setup middlewares
-  .use(require('compression')())
+  .use(compression())
   .use(express.json()) // for parsing application/json
   .use(express.urlencoded({ extended: true })) // for parsing application/x-www-form-urlencoded
   .set('view engine', 'ejs')
   // Statically serve the archive
-  .use('/archive', require('serve-index')(config.newsstand))
+  .use('/archive', serveIndex(config.newsstand))
   .use('/archive', express.static(config.newsstand))
   // Homepage
   .get('/', (req, res) => res.render('index', {db}))
@@ -204,7 +210,6 @@ module.exports = scheduleAndRun(downloadAll).then(() => env.isTest ? app : app.l
   // glob.sync(path.join(newsstand, '*', '*.png')).forEach(fs.rmSync)
 
   if (config.visionect) {
-    const VisionectApiClient = require('node-visionect')
     updateVss(new VisionectApiClient(config.visionect))
   }
 }))
